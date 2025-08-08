@@ -1,0 +1,80 @@
+
+import React, { useState, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { ArrowLeft, ArrowRight, RefreshCw, X, AlertTriangle, Globe } from 'lucide-react';
+
+export default function BrowserWindow({ initialUrl, onClose }) {
+  const [url, setUrl] = useState(initialUrl);
+  const [inputValue, setInputValue] = useState(initialUrl);
+  const iframeRef = useRef(null);
+
+  const navigate = (e) => {
+    e.preventDefault();
+    let finalUrl = inputValue;
+    if (!finalUrl.startsWith('http')) {
+      finalUrl = `https://${finalUrl}`;
+    }
+    setUrl(finalUrl);
+  };
+
+  const handleIframeNav = () => {
+    try {
+        const newLocation = iframeRef.current.contentWindow.location.href;
+        if (newLocation && !newLocation.includes('about:blank')) {
+            setInputValue(newLocation);
+        }
+    } catch (e) {
+        // Cross-origin error, ignore
+    }
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="bg-gray-900 border-gray-700 text-white sm:max-w-4xl h-[90vh] flex flex-col p-0">
+        <DialogHeader className="p-4 border-b border-gray-700 flex flex-row items-center justify-between">
+          <DialogTitle className="flex items-center gap-2">
+            <Globe size={16} /> Browser
+          </DialogTitle>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-4 w-4" />
+          </Button>
+        </DialogHeader>
+        <div className="p-2 border-b border-gray-700 flex items-center gap-2">
+          <Button variant="ghost" size="icon" onClick={() => iframeRef.current?.contentWindow.history.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => iframeRef.current?.contentWindow.history.forward()}>
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={() => iframeRef.current?.contentWindow.location.reload()}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <form onSubmit={navigate} className="flex-1">
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-600 rounded-md px-3 py-1 focus:ring-2 focus:ring-cyan-500 focus:outline-none"
+              placeholder="https://..."
+            />
+          </form>
+        </div>
+        <div className="flex-1 relative">
+            <div className="absolute top-0 left-0 right-0 p-2 bg-yellow-900/50 text-yellow-200 text-xs flex items-center gap-2">
+                <AlertTriangle size={14}/>
+                <span>Hinweis: Aus Sicherheitsgründen blockieren viele Websites (z.B. Google, YouTube) die Anzeige in diesem Browser.</span>
+            </div>
+            <iframe
+              ref={iframeRef}
+              src={url}
+              className="w-full h-full border-0 pt-8"
+              title="Browser"
+              sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
+              onLoad={handleIframeNav}
+            ></iframe>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
