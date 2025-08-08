@@ -1,0 +1,210 @@
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { DesktopFile } from '@/entities/DesktopFile';
+import { AgentMemory } from '@/entities/AgentMemory';
+import { InvokeLLM } from '@/integrations/Core';
+
+import ChatInterface from '../components/desktop/ChatInterface';
+import DesktopIcon from '../components/desktop/DesktopIcon';
+import FileViewer from '../components/desktop/FileViewer';
+import BrowserWindow from '../components/desktop/BrowserWindow'; // Added BrowserWindow import
+import { Bot } from 'lucide-react';
+
+export default function DesktopPage() {
+  const [files, setFiles] = useState([]);
+  const [memories, setMemories] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [browserState, setBrowserState] = useState({ isOpen: false, url: '' }); // Added browserState
+  const [error, setError] = useState(null);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [desktopFiles, agentMemories] = await Promise.all([
+        DesktopFile.list('-created_date'),
+        AgentMemory.list('-created_date', 20)
+      ]);
+      setFiles(desktopFiles);
+      setMemories(agentMemories.reverse());
+    } catch (err) {
+      console.error("Fehler beim Laden der Daten:", err);
+      setError("Konnte die Desktop-Daten nicht laden.");
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleSendMessage = async (message) => {
+    if (!message.trim()) return;
+
+    setIsLoading(true);
+    setError(null);
+    const userMessage = { role: 'user', content: message };
+    setMemories(prev => [...prev, userMessage]);
+    await AgentMemory.create(userMessage);
+
+    // Updated fileContext to include file type
+    const fileContext = files.map(f => `Datei/App: ${f.name} (Typ: ${f.type || 'file'})`).join('\n');
+    const memoryContext = memories.slice(-10).map(m => `${m.role}: ${m.content}`).join('\n');
+
+    const prompt = `Du bist 'DesktopAI', ein KI-Agent, der einen virtuellen Windows-Desktop bedient.
+Der Benutzer interagiert mit dir per Chat.
+Aktueller Desktop-Zustand:
+${fileContext}
+
+Letzter Gesprächsverlauf:
+${memoryContext}
+
+Benutzer-Anweisung: "${message}"
+
+Deine Aufgabe ist es, auf den Benutzer zu antworten und eine der folgenden Aktionen auszuführen: 'CREATE', 'UPDATE', 'DELETE', 'READ', 'OPEN_BROWSER', 'NONE'.
+Wenn du 'READ' ausführst, fasse den Inhalt im Feld 'responseToUser' zusammen.
+Gib deine Antwort NUR als JSON-Objekt mit dem folgenden Schema zurück:
+{
+  "thought": "Dein Gedankengang, um die Aktion zu bestimmen.",
+  "responseToUser": "Deine Antwort an den Benutzer im Chat.",
+  "action": {
+    "type": "'CREATE' | 'UPDATE' | 'DELETE' | 'READ' | 'OPEN_BROWSER' | 'NONE'",
+    "fileName": "Name der Zieldatei (für Dateiaktionen).",
+    "content": "Neuer Inhalt für 'CREATE' oder 'UPDATE'.",
+    "url": "Die zu öffnende URL für 'OPEN_BROWSER' (z.B. 'https://wikipedia.org')."
+  }
+}`;
+
+    try {
+      const result = await InvokeLLM({
+        prompt: prompt,
+        response_json_schema: {
+          type: "object",
+          properties: {
+            thought: { type: "string" },
+            responseToUser: { type: "string" },
+            action: {
+              type: "object",
+              properties: {
+                type: { type: "string", enum: ['CREATE', 'UPDATE', 'DELETE', 'READ', 'OPEN_BROWSER', 'NONE'] }, // Added OPEN_BROWSER
+                fileName: { type: "string" },
+                content: { type: "string" },
+                url: { type: "string" } // Added url property
+              },
+              required: ["type"]
+            }
+          },
+          required: ["thought", "responseToUser", "action"]
+        }
+      });
+      
+      const agentResponse = result;
+
+      if (!agentResponse || !agentResponse.responseToUser || !agentResponse.action) {
+        throw new Error("Der KI-Agent hat eine ungültige Antwortstruktur zurückgegeben.");
+      }
+
+      const agentMessage = { role: 'agent', content: agentResponse.responseToUser, action_details: JSON.stringify(agentResponse.action) };
+      setMemories(prev => [...prev, agentMessage]);
+      await AgentMemory.create(agentMessage);
+
+      const action = agentResponse.action;
+      if (action.type !== 'NONE') { // Changed condition, fileName not required for all actions
+         let fileToUpdate;
+         switch (action.type) {
+           case 'CREATE':
+             if (action.fileName) await DesktopFile.create({ name: action.fileName, content: action.content || '' });
+             break;
+           case 'UPDATE':
+             fileToUpdate = files.find(f => f.name.toLowerCase() === action.fileName.toLowerCase());
+             if (fileToUpdate) await DesktopFile.update(fileToUpdate.id, { content: action.content });
+             break;
+           case 'DELETE':
+             const fileToDelete = files.find(f => f.name.toLowerCase() === action.fileName.toLowerCase());
+             if (fileToDelete) await DesktopFile.delete(fileToDelete.id);
+             break;
+           case 'OPEN_BROWSER': // Handle OPEN_BROWSER action
+             if (action.url) {
+                const fullUrl = action.url.startsWith('http') ? action.url : `https://${action.url}`;
+                setBrowserState({ isOpen: true, url: fullUrl });
+             }
+             break;
+           case 'READ':
+             // Read action is handled by the agent's response
+             break;
+         }
+         if (action.type !== 'OPEN_BROWSER') await loadData(); // Refresh file list only if not opening browser
+      }
+    } catch (err) {
+      console.error("Fehler bei der Interaktion mit dem Agenten:", err);
+      const errorMsg = { role: 'agent', content: "Entschuldigung, ich habe ein Problem. Bitte versuche es erneut." };
+      setMemories(prev => [...prev, errorMsg]);
+      setError("Der KI-Agent konnte nicht antworten.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveFile = async (file, newContent) => {
+    try {
+      await DesktopFile.update(file.id, { content: newContent });
+      await loadData();
+      setSelectedFile(null);
+    } catch (err) {
+      console.error("Fehler beim Speichern der Datei:", err);
+      setError("Datei konnte nicht gespeichert werden.");
+    }
+  };
+  
+  // New function to handle double click on icons (files or apps)
+  const handleIconDoubleClick = (file) => {
+    if (file.type === 'app' && file.name === 'Browser') {
+      setBrowserState({ isOpen: true, url: 'https://www.google.com/search?q=Was+ist+ein+KI-Agent' });
+    } else {
+      setSelectedFile(file);
+    }
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col">
+      <div className="flex-grow p-4 grid grid-cols-6 gap-4">
+        {files.map(file => (
+          // Updated onDoubleClick to use handleIconDoubleClick
+          <DesktopIcon key={file.id} file={file} onDoubleClick={() => handleIconDoubleClick(file)} />
+        ))}
+      </div>
+      
+      <div className="absolute bottom-0 left-0 right-0 p-4">
+        <div className="max-w-4xl mx-auto">
+            <ChatInterface
+                messages={memories}
+                onSendMessage={handleSendMessage}
+                isLoading={isLoading}
+            />
+        </div>
+      </div>
+
+
+      {selectedFile && (
+        <FileViewer 
+          file={selectedFile}
+          onClose={() => setSelectedFile(null)}
+          onSave={handleSaveFile}
+        />
+      )}
+
+      {/* Render BrowserWindow conditionally */}
+      {browserState.isOpen && (
+        <BrowserWindow
+          initialUrl={browserState.url}
+          onClose={() => setBrowserState({ isOpen: false, url: '' })}
+        />
+      )}
+      
+       <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/30 p-2 rounded-lg">
+          <Bot className="text-cyan-400 animate-pulse" />
+          <span className="font-semibold text-white">DesktopAI Aktiv</span>
+        </div>
+
+      {error && <div className="absolute top-4 left-4 bg-red-500 text-white p-2 rounded">{error}</div>}
+    </div>
+  );
+}
