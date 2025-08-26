@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { Button } from '../../components/ui/button';
 import { ArrowLeft, ArrowRight, RefreshCw, X, AlertTriangle, Globe } from 'lucide-react';
 
 export default function BrowserWindow({ initialUrl, onClose }) {

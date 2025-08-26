@@ -1,14 +1,16 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { DesktopFile } from '@/entities/DesktopFile';
-import { AgentMemory } from '@/entities/AgentMemory';
-import { InvokeLLM } from '@/integrations/Core';
+import { DesktopFile } from '../entities/DesktopFile.js';
+import { AgentMemory } from '../entities/AgentMemory.js';
+import { InvokeLLM } from '../integrations/Core.js';
 
-import ChatInterface from '../components/desktop/ChatInterface';
-import DesktopIcon from '../components/desktop/DesktopIcon';
-import FileViewer from '../components/desktop/FileViewer';
-import BrowserWindow from '../components/desktop/BrowserWindow'; // Added BrowserWindow import
-import { Bot } from 'lucide-react';
+import ChatInterface from '../Components/Desktop/ChatInterface.js';
+import DesktopIcon from '../Components/Desktop/DesktopIcon.js';
+import FileViewer from '../Components/Desktop/FileViewer.js';
+import BrowserWindow from '../Components/Desktop/BrowserWindow.js';
+import OllamaStatusPanel from '../Components/Desktop/OllamaStatusPanel.js';
+import TrainingPanel from '../Components/Desktop/TrainingPanel.js';
+import { Bot, Settings, Brain } from 'lucide-react';
 
 export default function DesktopPage() {
   const [files, setFiles] = useState([]);
@@ -16,6 +18,8 @@ export default function DesktopPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [browserState, setBrowserState] = useState({ isOpen: false, url: '' }); // Added browserState
+  const [ollamaStatusOpen, setOllamaStatusOpen] = useState(false);
+  const [trainingPanelOpen, setTrainingPanelOpen] = useState(false);
   const [error, setError] = useState(null);
 
   const loadData = useCallback(async () => {
@@ -198,10 +202,36 @@ Gib deine Antwort NUR als JSON-Objekt mit dem folgenden Schema zurück:
           onClose={() => setBrowserState({ isOpen: false, url: '' })}
         />
       )}
+
+      {/* Ollama Status Panel */}
+      <OllamaStatusPanel 
+        isOpen={ollamaStatusOpen}
+        onClose={() => setOllamaStatusOpen(false)}
+      />
+
+      {/* Training Panel */}
+      <TrainingPanel 
+        isOpen={trainingPanelOpen}
+        onClose={() => setTrainingPanelOpen(false)}
+      />
       
        <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/30 p-2 rounded-lg">
           <Bot className="text-cyan-400 animate-pulse" />
           <span className="font-semibold text-white">DesktopAI Aktiv</span>
+          <button 
+            onClick={() => setTrainingPanelOpen(true)}
+            className="ml-2 p-1 hover:bg-white/20 rounded"
+            title="Training & Verbesserung"
+          >
+            <Brain className="w-4 h-4 text-gray-300 hover:text-white" />
+          </button>
+          <button 
+            onClick={() => setOllamaStatusOpen(true)}
+            className="p-1 hover:bg-white/20 rounded"
+            title="Ollama Status & Settings"
+          >
+            <Settings className="w-4 h-4 text-gray-300 hover:text-white" />
+          </button>
         </div>
 
       {error && <div className="absolute top-4 left-4 bg-red-500 text-white p-2 rounded">{error}</div>}
