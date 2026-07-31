@@ -1,0 +1,80 @@
+name: Bug report
+description: Report a reproducible defect in the host-integrated React snapshot
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. For security issues, do not file a public issue; use GitHub private vulnerability reporting.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest sequence that reproduces the issue.
+      placeholder: |
+        1. Open Pages/Desktop in the host environment
+        2. Trigger ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Action policy
+        - Desktop page
+        - Desktop component
+        - Browser window
+        - Host integration
+        - Tests or CI
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version
+      description: Required when the issue involves tests or local verification.
+      placeholder: "22.12.0"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant output from npm test, host logs, or browser console.
+      render: shell
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I ran `npm test` when the issue is testable outside the host runtime.
+          required: false
+        - label: I have not included secrets, tokens, or private host data.
+          required: true
+        - label: This is not a security vulnerability report.
+          required: true

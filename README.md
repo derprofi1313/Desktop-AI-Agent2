@@ -36,6 +36,13 @@ npm test
 CI repeats the tests on Node.js 22.12 and 24 with read-only repository
 permissions, commit-pinned setup actions, and a committed lockfile.
 
+## Community
+
+- [Contributing](CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+- [MIT License](LICENSE)
+
 ## Host integration
 
 This repository is intentionally not a standalone web application. The page
