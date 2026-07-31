@@ -3,29 +3,46 @@ import React, { useState, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ArrowRight, RefreshCw, X, AlertTriangle, Globe } from 'lucide-react';
+import { normalizeBrowserUrl } from '../../lib/actionPolicy.js';
 
 export default function BrowserWindow({ initialUrl, onClose }) {
-  const [url, setUrl] = useState(initialUrl);
-  const [inputValue, setInputValue] = useState(initialUrl);
+  const safeInitialUrl = normalizeBrowserUrl(initialUrl) ?? 'https://example.com/';
+  const [url, setUrl] = useState(safeInitialUrl);
+  const [inputValue, setInputValue] = useState(safeInitialUrl);
+  const [navigationError, setNavigationError] = useState('');
   const iframeRef = useRef(null);
 
   const navigate = (e) => {
     e.preventDefault();
-    let finalUrl = inputValue;
-    if (!finalUrl.startsWith('http')) {
-      finalUrl = `https://${finalUrl}`;
+    const finalUrl = normalizeBrowserUrl(inputValue);
+    if (finalUrl === null) {
+      setNavigationError('Nur HTTPS-Adressen auf dem Standardport ohne Zugangsdaten sind erlaubt.');
+      return;
     }
+
+    setNavigationError('');
+    setInputValue(finalUrl);
     setUrl(finalUrl);
+  };
+
+  const runFrameCommand = (command) => {
+    try {
+      command(iframeRef.current?.contentWindow);
+      setNavigationError('');
+    } catch {
+      setNavigationError('Diese Seite blockiert die angeforderte Browser-Navigation.');
+    }
   };
 
   const handleIframeNav = () => {
     try {
-        const newLocation = iframeRef.current.contentWindow.location.href;
-        if (newLocation && !newLocation.includes('about:blank')) {
-            setInputValue(newLocation);
-        }
-    } catch (e) {
-        // Cross-origin error, ignore
+      const newLocation = iframeRef.current?.contentWindow?.location.href;
+      const normalizedUrl = normalizeBrowserUrl(newLocation);
+      if (normalizedUrl !== null) {
+        setInputValue(normalizedUrl);
+      }
+    } catch {
+      // Cross-origin frames intentionally hide their current location.
     }
   };
 
@@ -41,13 +58,25 @@ export default function BrowserWindow({ initialUrl, onClose }) {
           </Button>
         </DialogHeader>
         <div className="p-2 border-b border-gray-700 flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => iframeRef.current?.contentWindow.history.back()}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => runFrameCommand((frame) => frame?.history.back())}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => iframeRef.current?.contentWindow.history.forward()}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => runFrameCommand((frame) => frame?.history.forward())}
+          >
             <ArrowRight className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => iframeRef.current?.contentWindow.location.reload()}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => runFrameCommand((frame) => frame?.location.reload())}
+          >
             <RefreshCw className="h-4 w-4" />
           </Button>
           <form onSubmit={navigate} className="flex-1">
@@ -60,6 +89,11 @@ export default function BrowserWindow({ initialUrl, onClose }) {
             />
           </form>
         </div>
+        {navigationError && (
+          <div className="px-3 py-2 bg-red-950 text-red-200 text-xs" role="alert">
+            {navigationError}
+          </div>
+        )}
         <div className="flex-1 relative">
             <div className="absolute top-0 left-0 right-0 p-2 bg-yellow-900/50 text-yellow-200 text-xs flex items-center gap-2">
                 <AlertTriangle size={14}/>
@@ -70,7 +104,9 @@ export default function BrowserWindow({ initialUrl, onClose }) {
               src={url}
               className="w-full h-full border-0 pt-8"
               title="Browser"
-              sandbox="allow-forms allow-scripts allow-same-origin allow-popups"
+              sandbox="allow-forms allow-scripts"
+              referrerPolicy="no-referrer"
+              allow=""
               onLoad={handleIframeNav}
             ></iframe>
         </div>
